@@ -10,8 +10,9 @@ args_array = ARGV.map { |arg| arg.split(":") }.flatten
 # Then split up this into a hash
 args = {}
 args_array.each do |arg|
+
   arg_name  = arg.split("=").first.to_sym
-  arg_value = arg.split("=").last
+  arg_value = arg.gsub(arg.split("=").first, "").delete_prefix("=")
 
   # handle a request for just "help" as a special case
   # if arg_name = "help"
