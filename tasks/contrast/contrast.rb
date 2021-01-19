@@ -5,6 +5,7 @@ require_relative "lib/client"
 module Kenna
   module Toolkit
     class ContrastTask < Kenna::Toolkit::BaseTask
+      SCANNER = "Contrast"
 
       def self.metadata
         {
@@ -97,117 +98,128 @@ module Kenna
         kenna_api_key = @options[:kenna_api_key]
         kenna_connector_id = @options[:kenna_connector_id]
 
-        vulns = @client.contrast_get_vulns(contrast_application_tags, contrast_environments, contrast_severities)
+        vulns = @client.get_vulns(contrast_application_tags, contrast_environments, contrast_severities)
 
-        # vulns.each do |v|
+        vulns.each do |v|
 
-        #   application = v["application"]["name"]
-        #   # file??
-        #   # tags??
+          asset = {
+            "file" => v["application"]["name"],
+            "application" => v["application"]["name"],
+            "priority" => map_importance_to_priority(v["application"]["importance_description"])            
+            #"tags" => ???
+          }
 
-        #   asset = {
+          create_kdi_asset(asset)
 
-        #     "file" => v["application"]["name"],
-        #     "application" => v["application"]["name"],
-        #     "tags" => tags
+          vuln_additional_fields = {
+            "language" => v["application"]["language"],
+            "confidence" => v["confidence"],
+            "impact" => v["impact"],
+            "likelihood" => v["likelihood"],
+            "rule_name": v["rule_name"],
+            "rule_title": v["rule_title"]
+            #TODO session metadata, environments, servers?
+          }
+          vuln_additional_fields.compact!
 
-        #   }
+          id = v["uuid"]
 
-        #   # scanner_score = ""
-        #   scanner_score = if issue.key?("cvssScore")
-        #                     issue.fetch("cvssScore").to_i
-        #                   else
-        #                     vuln_severity.fetch(issue.fetch("severity"))
-        #                   end
+          vuln = {
+            "scanner_identifier" => id,
+            "scanner_type" => SCANNER,
+            "scanner_score" => map_severity_to_scanner_score(v["severity"]),
+            "created_at" => v["first_time_seen"],
+            "last_time_seen" => v["last_seen_at"],
+            #"last_fixed_on" => ??
+            #"closed_at" => v["closed_time"]
+            "status" => map_status_to_open_closed(v["status"]), #(required - valid values open, closed)
+            "additional_fields" => JSON.pretty_generate(vuln_additional_fields)
+          }
+          vuln.compact!
 
-        #   source = project.fetch("source") if issue.key?("source")
-        #   fixedIn = issue.fetch("fixedIn") if issue.key?("fixedIn")
-        #   from = issue.fetch("from") if issue.key?("from")
-        #   functions = issue.fetch("functions") if issue.key?("functions")
-        #   isPatchable = issue.fetch("isPatchable").to_s if issue.key?("isPatchable")
-        #   isUpgradable = issue.fetch("isUpgradable").to_s if issue.key?("isUpgradable")
-        #   if issue.key?("references")
-        #     language = issue.fetch("language") if issue.key? "language",
-        #                                                       references = issue.fetch("references")
-        #   end
-        #   semver = JSON.pretty_generate(issue.fetch("semver")) if issue.key?("semver")
-        #   issue_severity = issue.fetch("severity") if issue.key?("severity")
-        #   version =  issue.fetch("version") if issue.key?("version")
-        #   description = issue.fetch("description") if issue.key?("description")
+          recommendation = @client.get_trace_recommendation(id)
+          story = @client.get_trace_story(id)
 
-        #   additional_fields = {
-        #     "source" => source,
-        #     "fixedIn" => fixedIn,
-        #     "from" => from,
-        #     "functions" => functions,
-        #     "isPatchable" => isPatchable,
-        #     "isUpgradable" => isUpgradable,
-        #     "language" => language,
-        #     "references" => references,
-        #     "semver" => semver,
-        #     "severity" => issue_severity,
-        #     "version" => version,
-        #     "identifiers" => identifiers
-        #   }
+          cwe = process_cwe(recommendation["cwe"])
 
-        #   additional_fields.compact!
+          vuln_def = {
+            "scanner_identifier" => id,
+            "scanner_type" => SCANNER,
+            #"solution" => patches,
+            #"cve_identifiers" => cves,
+            "cwe_identifiers" => cwe,
+            "name" => v["title"],
+            "description" => "TODO",
+            "solution" => recommendation["recommendation"]["text"]
+          }
 
-        #   # craft the vuln hash
-        #   vuln = {
-        #     "scanner_identifier" => issue.fetch("id"),
-        #     "scanner_type" => "Snyk",
-        #     "scanner_score" => scanner_score,
-        #     "created_at" => issue_obj.fetch("introducedDate"),
-        #     "details" => JSON.pretty_generate(additional_fields)
-        #   }
+          vuln_def.compact!
 
-        #   vuln.compact!
+          # Create the KDI entries
+          print asset
+          print vuln
+          print vuln_def
+          create_kdi_asset_vuln(asset, vuln)
+          create_kdi_vuln_def(vuln_def)
+        end
 
-        #   patches = issue["patches"].first.to_s unless issue["patches"].nil? || issue["patches"].empty?
+        ### Write KDI format
+        kdi_output = { skip_autoclose: false, assets: @assets, vuln_defs: @vuln_defs }
+        output_dir = "#{$basedir}/#{@options[:output_directory]}"
+        filename = "generator.kdi.json"
+        write_file output_dir, filename, JSON.pretty_generate(kdi_output)
+        print_good "Output is available at: #{output_dir}/#{filename}"
 
-        #   cves = nil
-        #   cwes = nil
-        #   unless identifiers.nil?
-        #     cve_array = identifiers["CVE"] unless identifiers["CVE"].nil? || identifiers["CVE"].length.zero?
-        #     cwe_array = identifiers["CWE"] unless identifiers["CWE"].nil? || identifiers["CVE"].length.zero?
-        #     cve_array.delete_if { |x| x.start_with?("RHBA", "RHSA") } unless cve_array.nil? || cve_array.length.zero?
-        #     cves = cve_array.join(",") unless cve_array.nil? || cve_array.length.zero?
-        #     cwes = cwe_array.join(",") unless cwe_array.nil? || cwe_array.length.zero?
-        #   end
+        ### Finish by uploading if we're all configured
+        return unless kenna_connector_id && kenna_api_host && kenna_api_key
 
-        #   vuln_name = nil
-        #   vuln_name = issue.fetch("title") unless issue.fetch("title").nil?
-
-        #   vuln_def = {
-        #     "scanner_identifier" => issue.fetch("id"),
-        #     "scanner_type" => "Snyk",
-        #     "solution" => patches,
-        #     "cve_identifiers" => cves,
-        #     "cwe_identifiers" => cwes,
-        #     "name" => vuln_name,
-        #     "description" => description
-        #   }
-
-        #   vuln_def.compact!
-
-        #   # Create the KDI entries
-        #   create_kdi_asset_vuln(asset, vuln)
-        #   create_kdi_vuln_def(vuln_def)
-        # end
-
-        # ### Write KDI format
-        # kdi_output = { skip_autoclose: false, assets: @assets, vuln_defs: @vuln_defs }
-        # output_dir = "#{$basedir}/#{@options[:output_directory]}"
-        # filename = "generator.kdi.json"
-        # write_file output_dir, filename, JSON.pretty_generate(kdi_output)
-        # print_good "Output is available at: #{output_dir}/#{filename}"
-
-        # ### Finish by uploading if we're all configured
-        # return unless kenna_connector_id && kenna_api_host && kenna_api_key
-
-        # print_good "Attempting to upload to Kenna API at #{kenna_api_host}"
-        # #upload_file_to_kenna_connector kenna_connector_id, kenna_api_host, kenna_api_key, "#{output_dir}/#{filename}"
+        print_good "Attempting to upload to Kenna API at #{kenna_api_host}"
+        upload_file_to_kenna_connector kenna_connector_id, kenna_api_host, kenna_api_key, "#{output_dir}/#{filename}"
       end
+
+      def map_importance_to_priority(importance)
+        case importance
+        when "CRITICAL"
+          "10"
+        when "HIGH"
+          "8"
+        when "MEDIUM"
+          "6"
+        when "LOW"
+          "4"
+        when "UNIMPORTANT"
+          "2"
+        end
+      end
+
+      def map_severity_to_scanner_score(severity)
+        case severity
+        when "Critical"
+          "10"
+        when "High"
+          "8"
+        when "Medium"
+          "6"
+        when "Low"
+          "4"
+        when "Note"
+          "2"
+        end
+      end
+
+      def map_status_to_open_closed(status)
+        case status
+        when "Reported", "Suspicious", "Confirmed"
+          "open"
+        when "Remediated", "Fixed", "Not a Problem"
+          "closed"
+        end
+      end 
+
+      def process_cwe(cwe_link)
+        cwe_link.split("/")[-1].gsub(".html", "")
+      end 
+
     end
   end
 end

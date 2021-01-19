@@ -12,7 +12,7 @@ module Kenna
           @headers = { "Authorization": "#{contrast_auth_header}", "API-Key": "#{contrast_api_key}" }
         end
 
-        def contrast_get_vulns(tags, environments, severities)
+        def get_vulns(tags, environments, severities)
           print "Getting vulnerabilities from the Contrast API"
 
           more_results = true
@@ -41,6 +41,22 @@ module Kenna
           end
 
           out
+        end
+
+        def get_trace_recommendation(id)
+          print "Getting recommendation for trace"
+          url = "#{@base_url}/traces/#{id}/recommendation"
+
+          response = RestClient.get(url, @headers)
+          JSON.parse response.body
+        end
+
+        def get_trace_story(id)
+          print "Getting story for trace"
+          url = "#{@base_url}/traces/#{id}/story"
+
+          response = RestClient.get(url, @headers)
+          JSON.parse response.body
         end
       end
     end
