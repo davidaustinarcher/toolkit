@@ -137,7 +137,7 @@ module Kenna
           }
           vuln.compact!
 
-          recommendation = @client.get_trace_recommendation(id)
+          recommendation = @client.get_trace_recommendation(id, v["rule_name"])
           story = @client.get_trace_story(id)
 
           cwe = process_cwe(recommendation["cwe"])
@@ -145,7 +145,6 @@ module Kenna
           vuln_def = {
             "scanner_identifier" => id,
             "scanner_type" => SCANNER,
-            #"solution" => patches,
             #"cve_identifiers" => cves,
             "cwe_identifiers" => cwe,
             "name" => v["title"],
@@ -156,9 +155,9 @@ module Kenna
           vuln_def.compact!
 
           # Create the KDI entries
-          print asset
-          print vuln
-          print vuln_def
+          #print asset
+          #print vuln
+          #print vuln_def
           create_kdi_asset_vuln(asset, vuln)
           create_kdi_vuln_def(vuln_def)
         end

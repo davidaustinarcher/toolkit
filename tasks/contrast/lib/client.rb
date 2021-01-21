@@ -10,6 +10,7 @@ module Kenna
           protocol = contrast_use_https ? "https://" : "http://"
           @base_url = "#{protocol}#{contrast_host}/Contrast/api/ng/#{contrast_org_id}"
           @headers = { "Authorization": "#{contrast_auth_header}", "API-Key": "#{contrast_api_key}" }
+          @recs = Hash.new
         end
 
         def get_vulns(tags, environments, severities)
@@ -43,16 +44,19 @@ module Kenna
           out
         end
 
-        def get_trace_recommendation(id)
-          print "Getting recommendation for trace"
-          url = "#{@base_url}/traces/#{id}/recommendation"
+        def get_trace_recommendation(id, rule_name)
+          if @recs[rule_name].nil?
+            #print "Getting recommendation for rule #{rule_name}"
+            url = "#{@base_url}/traces/#{id}/recommendation"
+            response = RestClient.get(url, @headers)
 
-          response = RestClient.get(url, @headers)
-          JSON.parse response.body
+            @recs[rule_name] = JSON.parse response.body
+          end
+          @recs[rule_name]
         end
 
         def get_trace_story(id)
-          print "Getting story for trace"
+          #print "Getting story for trace"
           url = "#{@base_url}/traces/#{id}/story"
 
           response = RestClient.get(url, @headers)
