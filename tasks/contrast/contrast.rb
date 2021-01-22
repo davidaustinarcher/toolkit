@@ -131,7 +131,7 @@ module Kenna
             "created_at" => v["first_time_seen"],
             "last_time_seen" => v["last_seen_at"],
             #"last_fixed_on" => ??
-            #"closed_at" => v["closed_time"]
+            "closed_at" => v["closed_time"],
             "status" => map_status_to_open_closed(v["status"]), #(required - valid values open, closed)
             "additional_fields" => JSON.pretty_generate(vuln_additional_fields)
           }
@@ -140,15 +140,17 @@ module Kenna
           recommendation = @client.get_trace_recommendation(id, v["rule_name"])
           story = @client.get_trace_story(id)
 
+          description = format_story("#{contrast_use_https ? "https://" : "http://"}#{contrast_host}/static/ng/index.html#/#{contrast_org_id}/vulns/#{id}/overview", story)
+          #write_file "./output", "#{id}.json", JSON.pretty_generate(story)
+
           cwe = process_cwe(recommendation["cwe"])
 
           vuln_def = {
             "scanner_identifier" => id,
             "scanner_type" => SCANNER,
-            #"cve_identifiers" => cves,
             "cwe_identifiers" => cwe,
             "name" => v["title"],
-            "description" => "TODO",
+            "description" => description,
             "solution" => recommendation["recommendation"]["text"]
           }
 
@@ -216,9 +218,27 @@ module Kenna
       end 
 
       def process_cwe(cwe_link)
-        cwe_link.split("/")[-1].gsub(".html", "")
+        "CWE-" + cwe_link.split("/")[-1].gsub(".html", "")
       end 
 
+      def format_story(contrast_url, story)
+        chapters = story["story"]["chapters"]
+        risk = story["story"]["risk"]["text"]
+        
+        description = "Vulnerability Link:\\n"
+        description += contrast_url
+        #Example: https://eval.contrastsecurity.com/Contrast/static/ng/index.html#/a494820a-ae99-4833-980c-e763fcbe1f98/vulns/P9GN-PEB8-IP8N-MJY9/overview
+
+        description += "\\n\\nWhat happened?\\n"
+        chapters.each do |c|
+          description += c["introText"] + "\\n"
+          description += c["body"] + "\\n" unless c["body"].nil?
+        end
+        description += "\\n\\nWhat's the risk?\\n"
+        description += risk
+
+        description
+      end
     end
   end
 end
