@@ -22,7 +22,7 @@ See the main Toolkit for instructions on running tasks. For this task, if you le
 1. Create Kenna Data Importer connector in Kenna (example name: Contrast KDI) 
 1. Manually run the connector with the json from step 1 
 1. Click on the name of the connector to get the connector id
-1. Run the task with RiskIQ Keys and Kenna Key/connector id
+1. Run the task with Contrast credentials and Kenna Key/connector id
 
 ### Example call: 
 
