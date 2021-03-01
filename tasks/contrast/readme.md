@@ -9,6 +9,8 @@ The follow values need to be provided as a minimum to run this task
 1. Your Contrast Authorization Header, which can be copied from User Settings.
 1. Your Contrast Organization ID, as displayed in User Settings. This should be a GUID.
 
+The data extraction will be limited to applications which are licensed within the Contrast environment.
+
 ## Command Line
 
 See the main Toolkit for instructions on running tasks. For this task, if you leave off the Kenna API Key and Kenna Connector ID, the task will create a json file in the default or specified output directory. You can review the file before attempting to upload to the Kenna directly.
@@ -42,6 +44,8 @@ See the main Toolkit for instructions on running tasks. For this task, if you le
 | contrast_auth_token | true | Your Contrast Authorization Header, which can be copied from User Settings | n/a |
 | contrast_org_id | true | Your Contrast Organization ID, as displayed in User Settings | n/a |
 | contrast_use_https | false | Set to false if you would like to force an insecure HTTP connection | true |
-| contrast_application_tags | false | Filter vulnerabilities using a comma separated list of application tags |  |
-| contrast_environments | false | Filter vulnerabilities using a comma separated list of environments (DEVELOPMENT, QA or PRODUCTION) |  |
-| contrast_severities | false | Filter vulnerabilities using a comma separated list of severities (e.g. CRITICAL,HIGH) |  |
+| contrast_include_vulns | false | Controls whether Contrast Assess vulnerabilities are sent to Kenna | true |
+| contrast_application_tags | false | Filter vulnerabilities or libraries using a comma separated list of application tags |  |
+| contrast_environments | false | Filter vulnerabilities using a comma separated list of environments (DEVELOPMENT, QA or PRODUCTION). This applies to vulnerabilities only (not libraries).  |  |
+| contrast_severities | false | Filter vulnerabilities using a comma separated list of severities (e.g. CRITICAL,HIGH). This applies to vulnerabilities only (not libraries). |  |
+| contrast_include_libs | false | Controls whether Contrast OSS library CVE data is sent to Kenna | false |
