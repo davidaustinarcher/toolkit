@@ -79,6 +79,11 @@ module Kenna
               required: false,
               default: nil,
               description: "If set, we'll try to upload to this connector" },
+            { name: "kenna_appsec_module",
+              type: "boolean",
+              required: false,
+              default: true,
+              description: "Controls whether to use the newer Kenna AppSec module, set to false if you want to use the VM module (and group by CWE)" },
             { name: "output_directory",
               type: "filename",
               required: false,
@@ -110,6 +115,7 @@ module Kenna
         kenna_api_host = @options[:kenna_api_host]
         kenna_api_key = @options[:kenna_api_key]
         kenna_connector_id = @options[:kenna_connector_id]
+        kenna_appsec_module = @options[:kenna_appsec_module]
 
         if contrast_include_vulns == true
           #Fetch vulnerabilities from the Contrast API
@@ -124,28 +130,45 @@ module Kenna
             asset = create_application(v["application"]["app_id"], v["application"]["name"], v["application"]["importance_description"], v["application"]["language"])
 
             id = v["uuid"]
-
+            recommendation = @client.get_trace_recommendation(id, v["rule_name"])
+            cwe = process_cwe(recommendation["cwe"])
             story = @client.get_trace_story(id)
 
-            if story != nil
-              details = format_story(story)
+            if kenna_appsec_module == true
+              details = format_story(story, false) if story != nil
+
+              additional_fields = {
+                "Overview": details,
+                "How to Fix": format_solution(recommendation, false)
+              }
+
+              finding = {
+                "scanner_identifier" => id,
+                "scanner_type" => SCANNER,
+                "created_at" => Time.at(v["first_time_seen"].to_i/1000).iso8601,
+                "due_date" => nil,
+                "last_seen_at" => Time.at(v["last_time_seen"].to_i/1000).iso8601,
+                "severity" => map_severity_to_scanner_score(v["severity"]),
+                "triage_state" => map_status_to_triage_state(v["status"], v["sub_status"]),
+                "additional_fields" => additional_fields
+              }
+              finding.compact!
+            else
+              #Need to force wrap the text as the UI doesn't do it
+              details = format_story(story, true) if story != nil
+
+              vuln = {
+                "scanner_identifier" => id,
+                "scanner_type" => SCANNER,
+                "scanner_score" => map_severity_to_scanner_score(v["severity"]),
+                "created_at" => Time.at(v["first_time_seen"].to_i/1000).iso8601,
+                "last_seen_at" => Time.at(v["last_time_seen"].to_i/1000).iso8601,
+                "closed_at" => v["closed_time"].nil? ? nil : Time.at(v["closed_time"].to_i/1000).iso8601,
+                "status" => map_status_to_open_closed(v["status"]), #(required - valid values open, closed)
+                "details" => details
+              }
+              vuln.compact!
             end
-
-            vuln = {
-              "scanner_identifier" => id,
-              "scanner_type" => SCANNER,
-              "scanner_score" => map_severity_to_scanner_score(v["severity"]),
-              "created_at" => Time.at(v["first_time_seen"].to_i/1000).iso8601,
-              "last_seen_at" => Time.at(v["last_time_seen"].to_i/1000).iso8601,
-              "closed_at" => v["closed_time"].nil? ? nil : Time.at(v["closed_time"].to_i/1000).iso8601,
-              "status" => map_status_to_open_closed(v["status"]), #(required - valid values open, closed)
-              "details" => details
-            }
-            vuln.compact!
-
-            recommendation = @client.get_trace_recommendation(id, v["rule_name"])
-
-            cwe = process_cwe(recommendation["cwe"])
 
             vuln_def = {
               "scanner_identifier" => id,
@@ -153,14 +176,17 @@ module Kenna
               "cwe_identifiers" => cwe,
               "name" => v["title"],
               "description" => "#{contrast_use_https ? "https://" : "http://"}#{contrast_host}/static/ng/index.html#/#{contrast_org_id}/vulns/#{id}/overview",
-              "solution" => format_solution(recommendation)
+              "solution" => format_solution(recommendation, true)
             }
-
             vuln_def.compact!
 
             # Create the KDI entries
             create_kdi_asset(asset)
-            create_kdi_asset_vuln(asset, vuln)
+            if kenna_appsec_module == true
+              create_kdi_asset_finding(asset, finding)
+            else
+              create_kdi_asset_vuln(asset, vuln)
+            end
             create_kdi_vuln_def(vuln_def)
             results=true;
           end
@@ -177,37 +203,51 @@ module Kenna
 
           libs.each_with_index do |l,i|
             if i % 10 == 0
-              print "Processing #{i+1}/#{l.count} libraries"
+              print "Processing #{i+1}/#{libs.count} libraries"
             end
 
             #For each application using this lib
             l["apps"].each do |a|
 
-              #Check that this app is in our apps list (as libs can be used in multiple apps
+              #Check that this app is in our apps list (as libs can be used in multiple apps)
               if apps.include? a["app_id"]
                 asset = create_application(a["app_id"], a["name"], a["importance_description"], a["language"])
 
                 id = l["file_name"]
-    
-                #To do, figure out the score
-                #score = l["vulns"].max_by{|k| k[:severity_value]}
-                
                 details = "The latest available version of this library is #{l["latest_version"]}"
-
-                vuln = {
-                  "scanner_identifier" => id,
-                  "scanner_type" => SCANNER,
-                  "scanner_score" => 5, #This value is overwritten by Kenna
-                  "created_at" => Time.at(a["first_seen"].to_i/1000).iso8601,
-                  "last_seen_at" => Time.at(a["last_seen"].to_i/1000).iso8601,
-                  "closed_at" => nil,
-                  "status" => "open",
-                  "details" => details
-                }
-                vuln.compact!
-    
                 solution = "This library has #{l["total_vulnerabilities"]} CVE(s), consider upgrading this library to a newer version"
                 cves = l["vulns"].map { |v| v["name"] }
+
+                if kenna_appsec_module == true
+                  additional_fields = {
+                    "Overview": details,
+                    "How to Fix": solution
+                  }
+    
+                  finding = {
+                    "scanner_identifier" => id,
+                    "scanner_type" => SCANNER,
+                    "created_at" => Time.at(a["first_seen"].to_i/1000).iso8601,
+                    "due_date" => nil,
+                    "last_seen_at" => Time.at(a["last_seen"].to_i/1000).iso8601,
+                    "severity" => 5, #This value is overwritten by Kenna
+                    "triage_state" => "new", #TODO - map to our library states
+                    "additional_fields" => additional_fields
+                  }
+                  finding.compact!
+                else 
+                  vuln = {
+                    "scanner_identifier" => id,
+                    "scanner_type" => SCANNER,
+                    "scanner_score" => l.max_by(&:severity_value), 
+                    "created_at" => Time.at(a["first_seen"].to_i/1000).iso8601,
+                    "last_seen_at" => Time.at(a["last_seen"].to_i/1000).iso8601,
+                    "closed_at" => nil,
+                    "status" => "open",
+                    "details" => details
+                  }
+                  vuln.compact!
+                end
     
                 vuln_def = {
                   "scanner_identifier" => id,
@@ -217,12 +257,15 @@ module Kenna
                   "description" => "#{contrast_use_https ? "https://" : "http://"}#{contrast_host}/static/ng/index.html#/#{contrast_org_id}/libraries/java/#{l["hash"]}",
                   "solution" => solution
                 }
-
                 vuln_def.compact!
     
                 # Create the KDI entries
                 create_kdi_asset(asset)
-                create_kdi_asset_vuln(asset, vuln)
+                if kenna_appsec_module == true
+                  create_kdi_asset_finding(asset, finding)
+                else
+                  create_kdi_asset_vuln(asset, vuln)
+                end
                 create_kdi_vuln_def(vuln_def)
                 results=true;
               end
@@ -303,11 +346,33 @@ module Kenna
         end
       end 
 
+      def map_status_to_triage_state(status, sub_status)
+        case status
+        when "Reported"
+          "new"
+        when "Suspicious"
+          "in_progress"
+        when "Confirmed"
+          "triaged"
+        when "Remediated", "Fixed"
+          "resolved"
+        when "Not a Problem"
+          case sub_status
+          when "External security control", "Internal security control", "URL access limited"
+            "risk_accepted"
+          when "Other"
+            "not_a_security_issue"
+          when "False positive"
+            "false_positive"
+          end
+        end
+      end 
+
       def process_cwe(cwe_link)
         "CWE-" + cwe_link.split("/")[-1].gsub(".html", "")
       end 
 
-      def format_story(story)
+      def format_story(story, force_wrap_text)
         chapters = story["story"]["chapters"]
         risk = story["story"]["risk"]["text"]
 
@@ -325,13 +390,13 @@ module Kenna
           end
         end
         description += "\n\nWhat's the risk?\n\n"
-        description += wrap(risk)
+        description += force_wrap_text ? wrap(risk) : risk
 
         description
       end
 
-      def format_solution(rec)
-        solution = wrap(rec["recommendation"]["text"])
+      def format_solution(rec, force_wrap_text)
+        solution = force_wrap_text ? wrap(rec["recommendation"]["text"]) : rec["recommendation"]["text"]
         solution += "\n\nOWASP: " + rec["owasp"] unless rec["owasp"].nil?
       end
 

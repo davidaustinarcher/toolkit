@@ -31,7 +31,7 @@ module Kenna
             # do stuff with the data
             out.concat(body["traces"])
 
-            print "Fetched #{out.length} of #{body['count']} records"
+            print "Fetched #{out.length} of #{body['count']} vulnerabilities"
 
             # prepare the next request
             offset += limit
@@ -58,7 +58,6 @@ module Kenna
             quickFilter: "VULNERABLE",
             "apps": apps
           }
-          print payload
 
           while more_results
             url = "#{@base_url}/libraries/filter?offset=0&limit=25&sort=score&expand=skip_links%2Capps%2Cvulns%2Cstatus%2Cusage_counts"
@@ -69,7 +68,7 @@ module Kenna
             # do stuff with the data
             out.concat(body["libraries"])
 
-            print "Fetched #{out.length} of #{body['count']} records"
+            print "Fetched #{out.length} of #{body['count']} libraries"
 
             # prepare the next request
             offset += limit

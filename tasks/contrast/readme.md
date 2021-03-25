@@ -32,7 +32,10 @@ See the main Toolkit for instructions on running tasks. For this task, if you le
     contrast_host=<your host> \
     contrast_org_id=<your org> \
     contrast_api_key=<your api key> \
-    contrast_auth_token=<your auth header>
+    contrast_auth_token=<your auth header> \
+    kenna_api_key=<your kenna api key> \
+    kenna_api_host=<your kenna api environment, e.g. xxx.kennasecurity.com> \
+    kenna_connector_id=<your KDI connector id>
 ```
 
 ## Complete list of Options:
@@ -47,5 +50,9 @@ See the main Toolkit for instructions on running tasks. For this task, if you le
 | contrast_include_vulns | false | Controls whether Contrast Assess vulnerabilities are sent to Kenna | true |
 | contrast_application_tags | false | Filter vulnerabilities or libraries using a comma separated list of application tags |  |
 | contrast_environments | false | Filter vulnerabilities using a comma separated list of environments (DEVELOPMENT, QA or PRODUCTION). This applies to vulnerabilities only (not libraries).  |  |
-| contrast_severities | false | Filter vulnerabilities using a comma separated list of severities (e.g. CRITICAL,HIGH). This applies to vulnerabilities only (not libraries). |  |
+| contrast_severities | false | Filter vulnerabilities using a comma separated list of severities (e.g. CRITICAL,HIGH,MEDIUM,LOW,NOTE). This applies to vulnerabilities only (not libraries). |  |
 | contrast_include_libs | false | Controls whether Contrast OSS library CVE data is sent to Kenna | false |
+| kenna_appsec_module | true | Controls whether to use the newer Kenna AppSec module, set to false if you want to use the VM module | true |
+| kenna_api_key | true | Your Kenna API key obtained from the Menu > API keys option | n/a |
+| kenna_api_host | false | Your Kenna API environment host | api.kennasecurity.com |
+| kenna_connector_id | true | The id of the KDI connector you have created in Kenna (displayed when selecting the connector name) | n/a |
